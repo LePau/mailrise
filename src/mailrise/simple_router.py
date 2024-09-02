@@ -131,7 +131,7 @@ class SimpleRouter(Router):  # pylint: disable=too-few-public-methods
                 'type': rcpt.notify_type
             }
             yield AppriseNotification(
-                config=sender.config_yaml,
+                config=Template(sender.config_yaml).safe_substitute(mapping),
                 config_format='yaml',
                 title=sender.title_template.safe_substitute(mapping),
                 body=sender.body_template.safe_substitute(mapping),
