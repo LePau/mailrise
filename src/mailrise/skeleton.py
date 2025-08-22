@@ -13,6 +13,11 @@ import typing as typ
 from asyncio.events import new_event_loop
 from functools import partial
 
+# sitecustomize.py
+import aiosmtpd.smtp
+aiosmtpd.smtp.SMTP.AuthLoginUsernameChallenge = "Username:"
+aiosmtpd.smtp.SMTP.AuthLoginPasswordChallenge = "Password:"
+
 from aiosmtpd.controller import UnthreadedController, SMTP
 
 from mailrise import __version__
