@@ -75,7 +75,7 @@ class AppriseNotification(typ.NamedTuple):
     """Encapsulates the information needed to submit a notification to Apprise.
 
     Attributes:
-        config: The Apprise configuration file to use, as a string.
+        config: The Apprise configuration file to use, as a string.  has url parameters
         title: The notification title.
         body: The notification body.
         notify_type: The class of notification (info/success/warning/failure).

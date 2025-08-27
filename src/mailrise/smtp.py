@@ -13,6 +13,7 @@ from email.message import EmailMessage as StdlibEmailMessage
 from email.parser import BytesParser
 from tempfile import NamedTemporaryFile
 
+import html2text  # Add this import at the top
 import apprise
 from aiosmtpd.smtp import Envelope, Session, SMTP
 from apprise.common import ContentLocation
@@ -82,7 +83,7 @@ class AppriseHandler(typ.NamedTuple):
                 ' '.join(part.get_content_type() for part in mpe.message.iter_parts())
             self.config.logger.error('Failed to parse %s message: [ %s ]',
                                      mpe.message.get_content_type(), subparts)
-        self.config.logger.info('Accepted email: %s', _logmessage(notification))
+        self.config.logger.info('Accepted emaill: %s', _logmessage(notification))
 
         try:
             to_send = [data async for data in self.config.router.email_to_apprise(
@@ -94,7 +95,7 @@ class AppriseHandler(typ.NamedTuple):
             return f'450 router had internal exception: {exc}'
 
         results = await asyncio.gather(
-            *(_apprise_notify(self.config, data) for data in to_send),
+            *(_apprise_notify(self.config, data, self.config.logger) for data in to_send),
             return_exceptions=True
         )
         if any(isinstance(result, AppriseNotifyFailure) for result in results):
@@ -176,16 +177,48 @@ def _logmessage(msg: r.EmailMessage) -> str:
     return f'address: [ {addresses} ] subject: [ {subject} ] body: [ {body} ]{attachments_field}'
 
 
-async def _apprise_notify(config: MailriseConfig, data: r.AppriseNotification):
+async def _apprise_notify(config: MailriseConfig, data: r.AppriseNotification, logger: Logger):
+    # logger.info('Sending notification with data: %s', data)
+    # logger.info('Sending notification with config: %s', config)
     ap_config = apprise.AppriseConfig(asset=data.asset or r.DEFAULT_ASSET)
     ap_config.add_config(data.config, format=data.config_format)
     ap_instance = apprise.Apprise(ap_config)
 
+    # Detect Telegram URLs
+    urls = []
+    if isinstance(data.config, dict):
+        urls = data.config.get("urls", [])
+    elif isinstance(data.config, list):
+        urls = data.config
+    else:
+        urls = [data.config]
+
+    # logger.info(f"Detected URLs for notification from config ({data.config}): type {type(data.config)}")
+    # logger.info(f"Detected URLs for notification ({data.body_format}): {urls}")
+
+    body = data.body
+    body_format = data.body_format
+
+    if any("tgram" in str(url) for url in urls):
+        logger.info("Converting HTML body to text using html2text")
+        try:
+            body = html2text.html2text(data.body)
+            # Truncate body safely
+            body = body[:3072]
+            #body = body[:512]
+            # Set body_format to "text"
+            body_format = "text"
+        except Exception as e:
+            logger.info("ERROR")
+            logger.error(f"Error converting HTML to text: {e}")
+
+    # logger.info(f"Final body ({body_format}): {body}")
+
     attach_base = [_AttachMailrise(config, attach) for attach in data.attachments]
     success = await ap_instance.async_notify(
         title=data.title,
-        body=data.body,
-        body_format=data.body_format,
+        body=body,
+        body_format=body_format,
         notify_type=data.notify_type,
         attach=attach_base
     )
@@ -195,6 +228,7 @@ async def _apprise_notify(config: MailriseConfig, data: r.AppriseNotification):
     if not success:
         raise AppriseNotifyFailure
 
+# ...existing code...
 
 class _AttachMailrise(AttachBase):
     """An Apprise attachment type that wraps `Attachment`.
